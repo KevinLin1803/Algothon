@@ -20,10 +20,10 @@ def getPair(prchistory):
 
     for i in range(0,50):
         a = price_cov[i, : ]
-        i2 = np.argmin(a)
-        if (abs(price_cov[i][i2] < curr)):
-            stock_a = i
-            stock_b = i2
+        for i2 in range(0,50):
+            if (abs(price_cov[i][i2] < curr)):
+                stock_a = i
+                stock_b = i2
 
     return (stock_a, stock_b)
 
@@ -37,5 +37,6 @@ def getMyPosition(prcSoFar):
     lastRet /= lNorm
     rpos = np.array([int(x) for x in 5000 * lastRet / prcSoFar[:, -1]])
     currentPos = np.array([int(x) for x in currentPos+rpos])
+    print(getPair(prcSoFar))
     return currentPos
 
