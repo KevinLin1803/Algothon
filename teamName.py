@@ -11,19 +11,20 @@ currentPos = np.zeros(nInst)
 
 # Function that finds a pair with the greatest correlation(covariance closest to 1) 
 def getPair(prchistory):
-
     price_cov = np.cov(prchistory, rowvar=False)
 
     stock_a = 0
     stock_b = 0
-    curr = abs(price_cov[0][0] - 1)
+    # Probs wanna change this
+    curr = 9999999
 
     for i in range(0,50):
         a = price_cov[i, : ]
         for i2 in range(0,50):
-            if (abs(price_cov[i][i2] < curr)):
+            if (abs(price_cov[i][i2] < curr) and i != i2) :
                 stock_a = i
                 stock_b = i2
+                curr = abs(price_cov[i][i2] < curr)
 
     return (stock_a, stock_b)
 
