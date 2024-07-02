@@ -8,6 +8,8 @@ import numpy as np
 
 nInst = 50
 currentPos = np.zeros(nInst)
+pricePos = np.zeros(nInst)
+
 
 # Using Pair-Trade (covariance + z-scores)
 def getHighCovPairs(prcSoFar):
@@ -15,19 +17,22 @@ def getHighCovPairs(prcSoFar):
     cov_matrix = np.cov(prcSoFar)
     
     # Create a list of pairs and their covariance values
-    # cov_pairs = [covariance_value, instrument1, instrument2]
-    cov_pairs = []
+    # cor_pairs = [cor, instrument1, instrument2]
+    cor_pairs = []
     for i in range(nInst):
         for j in range(i + 1, nInst):
-            cov_pairs.append((cov_matrix[i, j], i, j))
-    
-    # Sort pairs by covariance in descending order
-    cov_pairs.sort(reverse=True, key=lambda x: x[0])
+            std_i = np.std(prcSoFar[i])
+            std_j = np.std(prcSoFar[j])
+            cor = cov_matrix[i, j] / (std_i * std_j)
+            cor_pairs.append((cor, i, j))
+
+    # Sort pairs by correlation in descending order
+    cor_pairs.sort(reverse=True, key=lambda x: x[0])
     
     # Select the top pairs
     selected_pairs = []                                 # Keep track of added pairs
     selected = set()
-    for cov, i, j in cov_pairs:
+    for cov, i, j in cor_pairs:
         if i not in selected and j not in selected:
             selected_pairs.append((i, j))
             selected.add(i)
@@ -35,7 +40,7 @@ def getHighCovPairs(prcSoFar):
         if len(selected_pairs) == nInst // 2:
             break
 
-    return selected_pairs
+    return selected_pairs[:10]
 
 
 def getMyPosition(prcSoFar):
@@ -49,29 +54,65 @@ def getMyPosition(prcSoFar):
     pairs = getHighCovPairs(prcSoFar)
 
     for idx, (i, j) in enumerate(pairs):
+
         # Calculate spread
         spread = prcSoFar[i, :] - prcSoFar[j, :]
         mean_spread = np.mean(spread)
         std_spread = np.std(spread)
 
-        # Get Z score
-        if std_spread > 0:
-            z_score = (spread[-1] - mean_spread)/std_spread
+        # Martingale Strategy
+        if currentPos[i] != 0 and currentPos[j] != 0:
+            old_spread = abs(pricePos[i] - pricePos[j])
+            current_spread = abs(prcSoFar[i, -1] - prcSoFar[j, -1])
+
+            # Check spread movement
+            if current_spread > old_spread:
+                # Close positions
+                # if currentPos[i] > 0:
+                #     currentPos[i] -= currentPos[i]
+                # else:
+                #     currentPos[i] += currentPos[i]
+                
+                # if currentPos[j] > 0:
+                #     currentPos[j] -= currentPos[j]
+                # else:
+                #     currentPos[j] += currentPos[j]
+                currentPos[i] = 0
+                currentPos[j] = 0
+                
+            else:
+                # Double down on losses
+                currentPos[i] *= 2
+                currentPos[j] *= 2
+
+            # Update price positions
+            pricePos[i] = prcSoFar[i, -1]
+            pricePos[j] = prcSoFar[j, -1]        
+
+        # Initial buy
         else:
-            z_score = 0
+            # Get Z score
+            if std_spread > 0:
+                z_score = (spread[-1] - mean_spread)/std_spread
+            else:
+                z_score = 0
 
-        # Base position
-        base_position = 10
+            # Base position
+            base_position = 10
 
-        # Trading Signal
-        if z_score > 4:                     # 4 std above, very limited trading since z_score is unlikely to go this high
-            # Short i, Long j
-            currentPos[i] -= base_position
-            currentPos[j] += base_position
+            # Trading Signal
+            if z_score > 1:
+                # Short i, Long j
+                currentPos[i] -= base_position
+                currentPos[j] += base_position
 
-        elif z_score < -4:                  # 4 std below
-            # Long i, Short j
-            currentPos[i] += base_position
-            currentPos[j] -= base_position
+            elif z_score < -1:
+                # Long i, Short j
+                currentPos[i] += base_position
+                currentPos[j] -= base_position
+            
+            # Update price positions
+            pricePos[i] = prcSoFar[i, -1]
+            pricePos[j] = prcSoFar[j, -1]
 
     return currentPos
