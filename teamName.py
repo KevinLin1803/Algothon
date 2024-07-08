@@ -6,13 +6,6 @@ import numpy as np
 ### IMPLEMENT 'getMyPosition' FUNCTION #############
 ### TO RUN, RUN 'eval.py' ##########################
 
-import numpy as np
-
-##### TODO #########################################
-### RENAME THIS FILE TO YOUR TEAM NAME #############
-### IMPLEMENT 'getMyPosition' FUNCTION #############
-### TO RUN, RUN 'eval.py' ##########################
-
 nInst = 50
 currentPos = np.zeros(nInst)
 pricePos = np.zeros(nInst)
