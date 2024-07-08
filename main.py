@@ -17,21 +17,21 @@ def getHighCovPairs(prcSoFar):
     
     # Create a list of pairs and their covariance values
     # cov_pairs = [covariance_value, instrument1, instrument2]
-    cov_pairs = []
+    cor_pairs = []
     for i in range(nInst):
         for j in range(i + 1, nInst):
             i_stdev = np.std(prcSoFar[i])
             j_stdev = np.std(prcSoFar[j])
-            cov_pairs.append(((cov_matrix[i, j]/(i_stdev * j_stdev)), i, j))
+            cor_pairs.append(((cov_matrix[i, j]/(i_stdev * j_stdev)), i, j))
     
     # Sort pairs by covariance in ascending order
-    # cov_pairs.sort(reverse=True, key=lambda x: x[0] )
-    cov_pairs.sort(key=lambda x: abs(x[0] - 1))
+    # cor_pairs.sort(reverse=True, key=lambda x: x[0] )
+    cor_pairs.sort(key=lambda x: abs(x[0] - 1))
     
     # Select the top pairs
     selected_pairs = []                                 # Keep track of added pairs
     selected = set()
-    for cov, i, j in cov_pairs:
+    for cov, i, j in cor_pairs:
         if i not in selected and j not in selected:
             selected_pairs.append((i, j))
             selected.add(i)
@@ -39,7 +39,7 @@ def getHighCovPairs(prcSoFar):
         if len(selected_pairs) == nInst // 2:
             break
     
-    return selected_pairs[:5]
+    return selected_pairs[:3]
 
 def getMyPosition(prcSoFar):
     (nins, nt) = prcSoFar.shape
@@ -75,18 +75,20 @@ def getMyPosition(prcSoFar):
                 pricePos[i] = prcSoFar[i, -1]
                 pricePos[j] = prcSoFar[j, -1]
 
-            # elif z_score < -2:                  # 3 std below
+            # elif z_score < -1:                  # 1 std below
             #     # Long i, Short j
-            #     currentPos[i] += base_position
-            #     currentPos[j] -= base_position
+            #     currentPos[i] += base_position/prcSoFar[i, -1]
+            #     currentPos[j] -= base_position/prcSoFar[j, -1]
             #     pricePos[i] = prcSoFar[i, -1]
             #     pricePos[j] = prcSoFar[j, -1]
             
             continue
 
+        # Bought at negative z_score
         if (currentPos[i] > 0):
             long = i
             short = j
+        # Bought at positive z_score
         else:
             long = j
             short = i
@@ -94,15 +96,52 @@ def getMyPosition(prcSoFar):
         current_spread = prcSoFar[long, -1] - prcSoFar[short, -1]
         initial_spread = pricePos[long] - pricePos[short]
 
-        if (current_spread < initial_spread):
+        if current_spread < initial_spread:
             currentPos[long] = 0
             currentPos[short] = 0
         else:
-            if ( currentPos[long] <= 50 ) and ( currentPos[short] <= 50 ):
-                currentPos[long] *= 2
-                currentPos[short] *= 2
+            if ( currentPos[long] <= 25 ) and ( currentPos[short] <= 25 ):
+                currentPos[long] *= 1.5
+                currentPos[short] *= 1.5
 
     return currentPos
+
+
+
+
+        # # Bought at negative z_score
+        # if (currentPos[i] > 0):
+        #     long = i
+        #     short = j
+
+        #     current_spread = prcSoFar[long, -1] - prcSoFar[short, -1]
+        #     initial_spread = pricePos[long] - pricePos[short]
+
+        #     #Stop loss (current_spread > (initial_spread * 3)):
+        #     if current_spread > initial_spread:
+        #         currentPos[long] = 0
+        #         currentPos[short] = 0
+        #     else:
+        #         if ( currentPos[long] <= 25 ) and ( currentPos[short] <= 25 ):
+        #             currentPos[long] *= 1.5
+        #             currentPos[short] *= 1.5
+
+        # # Bought at positive z_score
+        # else:
+        #     long = j
+        #     short = i
+
+        #     current_spread = prcSoFar[long, -1] - prcSoFar[short, -1]
+        #     initial_spread = pricePos[long] - pricePos[short]
+
+        #     if current_spread < initial_spread:
+        #         currentPos[long] = 0
+        #         currentPos[short] = 0
+        #     else:
+        #         if ( currentPos[long] <= 25 ) and ( currentPos[short] <= 25 ):
+        #             currentPos[long] *= 1.5
+        #             currentPos[short] *= 1.5
+
 
 # # Using Pair-Trade (covariance + z-scores)
 
