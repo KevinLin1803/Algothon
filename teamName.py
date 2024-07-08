@@ -6,6 +6,13 @@ import numpy as np
 ### IMPLEMENT 'getMyPosition' FUNCTION #############
 ### TO RUN, RUN 'eval.py' ##########################
 
+import numpy as np
+
+##### TODO #########################################
+### RENAME THIS FILE TO YOUR TEAM NAME #############
+### IMPLEMENT 'getMyPosition' FUNCTION #############
+### TO RUN, RUN 'eval.py' ##########################
+
 nInst = 50
 currentPos = np.zeros(nInst)
 pricePos = np.zeros(nInst)
@@ -68,17 +75,17 @@ def getMyPosition(prcSoFar):
             # Check spread movement
             if current_spread > old_spread:
                 # Close positions
-                # if currentPos[i] > 0:
-                #     currentPos[i] -= currentPos[i]
-                # else:
-                #     currentPos[i] += currentPos[i]
+                if currentPos[i] > 0:
+                    currentPos[i] -= currentPos[i]
+                else:
+                    currentPos[i] += currentPos[i]
                 
-                # if currentPos[j] > 0:
-                #     currentPos[j] -= currentPos[j]
-                # else:
-                #     currentPos[j] += currentPos[j]
-                currentPos[i] = 0
-                currentPos[j] = 0
+                if currentPos[j] > 0:
+                    currentPos[j] -= currentPos[j]
+                else:
+                    currentPos[j] += currentPos[j]
+                # currentPos[i] = 0
+                # currentPos[j] = 0
                 
             else:
                 # Double down on losses
