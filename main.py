@@ -90,7 +90,7 @@ def getMyPosition(prcSoFar):
         else:
             long = j
             short = i
-
+        
         current_spread = prcSoFar[long, -1] - prcSoFar[short, -1]
         initial_spread = pricePos[long] - pricePos[short]
 
