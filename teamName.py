@@ -7,6 +7,7 @@ import numpy as np
 
 nInst = 50
 currentPos = np.zeros(nInst)
+stop_loss_threshold = 2
 
 # Using Pair-Trade (covariance + z-scores)
 def getHighCovPairs(prcSoFar):
@@ -60,21 +61,14 @@ def getMyPosition(prcSoFar):
             current_spread = abs(prcSoFar[i, -1] - prcSoFar[j, -1])
 
             # Check spread movement
-            if current_spread > old_spread:
+            if current_spread > old_spread or abs(current_spread - mean_spread) > stop_loss_threshold * std_spread:
                 # Close positions
-                if currentPos[i] > 0:
-                    currentPos[i] -= currentPos[i]
-                else:
-                    currentPos[i] += currentPos[i]
-                
-                if currentPos[j] > 0:
-                    currentPos[j] -= currentPos[j]
-                else:
-                    currentPos[j] += currentPos[j]
-                
+                currentPos[i] = 0
+                currentPos[j] = 0
+
             else:
                 # Double down on losses, but limit open positions
-                if currentPos[i] < 80 or currentPos[j] < 80:
+                if currentPos[i] < 50 or currentPos[j] < 50:
                     currentPos[i] *= 2
                     currentPos[j] *= 2
 
@@ -87,7 +81,7 @@ def getMyPosition(prcSoFar):
                 z_score = 0
 
             # Base position
-            base_position = 10
+            base_position = 5
 
             # Trading Signal
             if z_score > 1:
