@@ -7,91 +7,92 @@ import numpy as np
 
 nInst = 50
 currentPos = np.zeros(nInst)
-stop_loss_threshold = 2
+pricePos = np.zeros(nInst)
 
-# Using Pair-Trade (covariance + z-scores)
-def getHighCovPairs(prcSoFar):
-    # Calculate the covariance matrix
-    cov_matrix = np.cov(prcSoFar)
+def calculate_ema(prices, window):
+    ''' Calculating the Exponential Moving Average (EMA) '''
+    ema = np.zeros_like(prices)
+    alpha = 2 / (window + 1)
+    ema[0] = prices[0]
+    for i in range(1, len(prices)):
+        ema[i] = alpha * prices[i] + (1 - alpha) * ema[i - 1]
+    return ema
+
+def calculate_rsi(prices, window):
+    ''' Calculating the Relative Strength Index (RSI) '''
+    deltas = np.diff(prices)
+    seed = deltas[:window]
+    up = seed[seed >= 0].sum() / window
+    down = -seed[seed < 0].sum() / window
+    rs = up / down
+    rsi = np.zeros_like(prices)
+    rsi[:window] = 100. - 100. / (1. + rs)
     
-    # Create a list of pairs and their covariance values
-    cor_pairs = []
-    for i in range(nInst):
-        for j in range(i + 1, nInst):
-            std_i = np.std(prcSoFar[i])
-            std_j = np.std(prcSoFar[j])
-            cor = cov_matrix[i, j] / (std_i * std_j)
-            cor_pairs.append((cor, i, j))
+    for i in range(window, len(prices)):
+        delta = deltas[i - 1]
+        if delta > 0:
+            up_val = delta
+            down_val = 0.
+        else:
+            up_val = 0.
+            down_val = -delta
+        up = (up * (window - 1) + up_val) / window
+        down = (down * (window - 1) + down_val) / window
+        rs = up / down
+        rsi[i] = 100. - 100. / (1. + rs)
+    return rsi
 
-    # Sort pairs by correlation in descending order
-    cor_pairs.sort(reverse=True, key=lambda x: x[0])
-    
-    # Select the top pairs
-    selected_pairs = []
-    selected = set()
-    for cov, i, j in cor_pairs:
-        if i not in selected and j not in selected:
-            selected_pairs.append((i, j))
-            selected.add(i)
-            selected.add(j)
-        if len(selected_pairs) == nInst // 2:
-            break
 
-    return selected_pairs[:10]
+def calculate_cci(prices, window):
+    ''' Calculating for the Commodity Channel Index (CCI) '''
+    typical_price = (prices[:, -window:].sum(axis=0)) / window
+    mean_deviation = np.mean(np.abs(prices[:, -window:] - typical_price), axis=0)
+    cci = (typical_price - np.mean(typical_price)) / (0.015 * np.mean(mean_deviation))
+    return cci
+
 
 def getMyPosition(prcSoFar):
     global currentPos, pricePos
     (nins, nt) = prcSoFar.shape
-    # Ensure there are enough time spread
-    if (nt < 2):
+    if nt < 2:
         return np.zeros(nins)
     
-    # Get pair instruments
-    pairs = getHighCovPairs(prcSoFar)
+    # EMA Variables (can change the windows)
+    ema_short_window = 10
+    ema_long_window = 12
+    
+    # RSI Variables (can change the window and thresholds)
+    rsi_window = 21
+    rsi_buy_threshold = 50
+    rsi_sell_threshold = 50
+    
+    # CCI Variables (can change the windows and threshold)
+    cci_window = 100
+    cci_buy_threshold = 50
+    cci_sell_threshold = 50
 
-    for idx, (i, j) in enumerate(pairs):
-        # Calculate spread
-        spread = prcSoFar[i, :] - prcSoFar[j, :]
-        mean_spread = np.mean(spread)
-        std_spread = np.std(spread)
+    for i in range(nins):
+        prices = prcSoFar[i, :]
+        ema_short = calculate_ema(prices, ema_short_window)
+        ema_long = calculate_ema(prices, ema_long_window)
+        rsi = calculate_rsi(prices, rsi_window)
+        cci = calculate_cci(prcSoFar, cci_window)
 
-        # Martingale Strategy
-        if currentPos[i] != 0 and currentPos[j] != 0:
-            old_spread = abs(prcSoFar[i, -2] - prcSoFar[j, -2])
-            current_spread = abs(prcSoFar[i, -1] - prcSoFar[j, -1])
+        # Calculate volatility
+        volatility = np.std(prices[-ema_short_window:])
+        if volatility == 0: 
+            volatility = 1
 
-            # Check spread movement
-            if current_spread > old_spread or abs(current_spread - mean_spread) > stop_loss_threshold * std_spread:
-                # Close positions
-                currentPos[i] = 0
-                currentPos[j] = 0
+        # Buy signal -- if ema(10) > ema(12) AND rsi(21) < 50 and CCI(100) < 50
+        if ema_short[-1] > ema_long[-1] and rsi[-1] > rsi_buy_threshold and cci[-1] > cci_buy_threshold:
+            currentPos[i] += 10
 
-            else:
-                # Double down on losses, but limit open positions
-                if currentPos[i] < 50 or currentPos[j] < 50:
-                    currentPos[i] *= 2
-                    currentPos[j] *= 2
+        # Sell signal
+        elif ema_short[-1] < ema_long[-1] and rsi[-1] < rsi_sell_threshold and cci[-1] < cci_sell_threshold:
+            currentPos[i] -= 10 / volatility
 
-        # Initial buy
+        # Hold Signal
         else:
-            # Get Z score
-            if std_spread > 0:
-                z_score = (spread[-1] - mean_spread) / std_spread
-            else:
-                z_score = 0
-
-            # Base position
-            base_position = 5
-
-            # Trading Signal
-            if z_score > 1:
-                # Short i, Long j
-                currentPos[i] -= base_position
-                currentPos[j] += base_position
-
-            elif z_score < -1:
-                # Long i, Short j
-                currentPos[i] += base_position
-                currentPos[j] -= base_position
+            currentPos[i] += 0
 
     return currentPos
