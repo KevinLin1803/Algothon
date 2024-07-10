@@ -1,254 +1,98 @@
-
 import numpy as np
-
-##### TODO #########################################
-### RENAME THIS FILE TO YOUR TEAM NAME #############
-### IMPLEMENT 'getMyPosition' FUNCTION #############
-### TO RUN, RUN 'eval.py' ##########################
 
 nInst = 50
 currentPos = np.zeros(nInst)
-pricePos = np.zeros(nInst)
 
-# Using Pair-Trade (covariance + z-scores)
-def getHighCovPairs(prcSoFar):
-    # Calculate the covariance matrix
-    cov_matrix = np.cov(prcSoFar)
+
+# Trading Signals based on EMA, RSI, and CCI
+
+
+def calculate_ema(prices, window):
+    ''' Calculating the Exponential Moving Average (EMA) '''
+    ema = np.zeros_like(prices)
+    alpha = 2 / (window + 1)
+    ema[0] = prices[0]
+    for i in range(1, len(prices)):
+        ema[i] = alpha * prices[i] + (1 - alpha) * ema[i - 1]
+    return ema
+
+
+def calculate_rsi(prices, window):
+    ''' Calculating the Relative Strength Index (RSI) '''
+    deltas = np.diff(prices)
+    seed = deltas[:window]
+    up = seed[seed >= 0].sum() / window
+    down = -seed[seed < 0].sum() / window
+    rs = up / down
+    rsi = np.zeros_like(prices)
+    rsi[:window] = 100. - 100. / (1. + rs)
     
-    # Create a list of pairs and their covariance values
-    # cov_pairs = [covariance_value, instrument1, instrument2]
-    cor_pairs = []
-    for i in range(nInst):
-        for j in range(i + 1, nInst):
-            i_stdev = np.std(prcSoFar[i])
-            j_stdev = np.std(prcSoFar[j])
-            cor_pairs.append(((cov_matrix[i, j]/(i_stdev * j_stdev)), i, j))
-    
-    # Sort pairs by covariance in ascending order
-    # cor_pairs.sort(reverse=True, key=lambda x: x[0] )
-    cor_pairs.sort(key=lambda x: abs(x[0] - 1))
-    
-    # Select the top pairs
-    selected_pairs = []                                 # Keep track of added pairs
-    selected = set()
-    for cov, i, j in cor_pairs:
-        if i not in selected and j not in selected:
-            selected_pairs.append((i, j))
-            selected.add(i)
-            selected.add(j)
-        if len(selected_pairs) == nInst // 2:
-            break
-    
-    return selected_pairs[:3]
+    for i in range(window, len(prices)):
+        delta = deltas[i - 1]
+        if delta > 0:
+            up_val = delta
+            down_val = 0.
+        else:
+            up_val = 0.
+            down_val = -delta
+        up = (up * (window - 1) + up_val) / window
+        down = (down * (window - 1) + down_val) / window
+        rs = up / down
+        rsi[i] = 100. - 100. / (1. + rs)
+    return rsi
+
+
+def calculate_cci(prices, window):
+    ''' Calculating for the Commodity Channel Index (CCI) '''
+    typical_price = (prices[:, -window:].sum(axis=0)) / window
+    mean_deviation = np.mean(np.abs(prices[:, -window:] - typical_price), axis=0)
+    cci = (typical_price - np.mean(typical_price)) / (0.015 * np.mean(mean_deviation))
+    return cci
+
 
 def getMyPosition(prcSoFar):
+    global currentPos
     (nins, nt) = prcSoFar.shape
-    # Ensure there are enough time spread
-    if (nt < 2):
+    if nt < 2:
         return np.zeros(nins)
     
-    # Get pair instruments
-    pairs = getHighCovPairs(prcSoFar)
+    # EMA Variables (can change the windows)
+    ema_short_window = 10
+    ema_long_window = 12
+    
+    # RSI Variables (can change the window and thresholds)
+    rsi_window = 21
+    rsi_buy_threshold = 50
+    rsi_sell_threshold = 50
+    
+    # CCI Variables (can change the windows and thresholds)
+    cci_window = 100
+    cci_buy_threshold = 50
+    cci_sell_threshold = 50
 
-    for idx, (i, j) in enumerate(pairs):
-        # Calculate spread
-        spread = prcSoFar[i, :] - prcSoFar[j, :]
-        mean_spread = np.mean(spread)
-        std_spread = np.std(spread)
-        
-        # Get Z score
-        if std_spread > 0:
-            z_score = (spread[-1] - mean_spread)/std_spread
+    for i in range(nins):
+        prices = prcSoFar[i, :]
+        ema_short = calculate_ema(prices, ema_short_window)
+        ema_long = calculate_ema(prices, ema_long_window)
+        rsi = calculate_rsi(prices, rsi_window)
+        cci = calculate_cci(prcSoFar, cci_window)
+
+        # Calculate volatility
+        volatility = np.std(prices[-ema_short_window:])
+        if volatility == 0: 
+            volatility = 1
+
+        # Buy signal -- if ema(10) > ema(12) AND rsi(21) < 50 and CCI(100) < 50
+        if ema_short[-1] > ema_long[-1] and rsi[-1] < rsi_buy_threshold and cci[-1] > cci_buy_threshold:
+            # We have no exit
+            currentPos[i] += (250/prcSoFar[i, -1]) // volatility
+
+        # Sell signal
+        elif ema_short[-1] < ema_long[-1] and rsi[-1] > rsi_sell_threshold and cci[-1] < cci_sell_threshold:
+            currentPos[i] -= (250/prcSoFar[i, -1]) // volatility
+
+        # Hold Signal
         else:
-            z_score = 0
-
-        # Base position ($1000)
-        base_position = 500
-
-        #Initial position
-        if (currentPos[i] == 0 and currentPos[j] == 0):
-            # Trading Signal
-            if z_score > 1:                     # 1 std above
-                # Short i, Long j
-                currentPos[i] -= base_position/prcSoFar[i, -1]
-                currentPos[j] += base_position/prcSoFar[j, -1]
-                pricePos[i] = prcSoFar[i, -1]
-                pricePos[j] = prcSoFar[j, -1]
-
-            # elif z_score < -1:                  # 1 std below
-            #     # Long i, Short j
-            #     currentPos[i] += base_position/prcSoFar[i, -1]
-            #     currentPos[j] -= base_position/prcSoFar[j, -1]
-            #     pricePos[i] = prcSoFar[i, -1]
-            #     pricePos[j] = prcSoFar[j, -1]
-            
-            continue
-
-        # Bought at negative z_score
-        if (currentPos[i] > 0):
-            long = i
-            short = j
-        # Bought at positive z_score
-        else:
-            long = j
-            short = i
-
-        current_spread = prcSoFar[long, -1] - prcSoFar[short, -1]
-        initial_spread = pricePos[long] - pricePos[short]
-
-        if current_spread < initial_spread:
-            currentPos[long] = 0
-            currentPos[short] = 0
-        else:
-            if ( currentPos[long] <= 25 ) and ( currentPos[short] <= 25 ):
-                currentPos[long] *= 1.5
-                currentPos[short] *= 1.5
+            currentPos[i] += 0
 
     return currentPos
-
-
-
-
-        # # Bought at negative z_score
-        # if (currentPos[i] > 0):
-        #     long = i
-        #     short = j
-
-        #     current_spread = prcSoFar[long, -1] - prcSoFar[short, -1]
-        #     initial_spread = pricePos[long] - pricePos[short]
-
-        #     #Stop loss (current_spread > (initial_spread * 3)):
-        #     if current_spread > initial_spread:
-        #         currentPos[long] = 0
-        #         currentPos[short] = 0
-        #     else:
-        #         if ( currentPos[long] <= 25 ) and ( currentPos[short] <= 25 ):
-        #             currentPos[long] *= 1.5
-        #             currentPos[short] *= 1.5
-
-        # # Bought at positive z_score
-        # else:
-        #     long = j
-        #     short = i
-
-        #     current_spread = prcSoFar[long, -1] - prcSoFar[short, -1]
-        #     initial_spread = pricePos[long] - pricePos[short]
-
-        #     if current_spread < initial_spread:
-        #         currentPos[long] = 0
-        #         currentPos[short] = 0
-        #     else:
-        #         if ( currentPos[long] <= 25 ) and ( currentPos[short] <= 25 ):
-        #             currentPos[long] *= 1.5
-        #             currentPos[short] *= 1.5
-
-
-# # Using Pair-Trade (covariance + z-scores)
-
-# def getHighCovPairs(prcSoFar):
-#     # Calculate the covariance matrix
-#     cov_matrix = np.cov(prcSoFar)
-    
-#     # Create a list of pairs and their covariance values
-#     # cor_pairs = [cor, instrument1, instrument2]
-#     cor_pairs = []
-#     for i in range(nInst):
-#         for j in range(i + 1, nInst):
-#             std_i = np.std(prcSoFar[i])
-#             std_j = np.std(prcSoFar[j])
-#             cor = cov_matrix[i, j] / (std_i * std_j)
-#             cor_pairs.append((cor, i, j))
-
-#     # Sort pairs by correlation in descending order
-#     cor_pairs.sort(reverse=True, key=lambda x: x[0])
-    
-#     # Select the top pairs
-#     selected_pairs = []                                 # Keep track of added pairs
-#     selected = set()
-#     for cov, i, j in cor_pairs:
-#         if i not in selected and j not in selected:
-#             selected_pairs.append((i, j))
-#             selected.add(i)
-#             selected.add(j)
-#         if len(selected_pairs) == nInst // 2:
-#             break
-
-#     return selected_pairs[:10]
-
-
-# def getMyPosition(prcSoFar):
-
-#     (nins, nt) = prcSoFar.shape
-#     # Ensure there are enough time spread
-#     if (nt < 2):
-#         return np.zeros(nins)
-    
-#     # Get pair instruments
-#     pairs = getHighCovPairs(prcSoFar)
-
-#     for idx, (i, j) in enumerate(pairs):
-
-#         # Calculate spread
-#         spread = prcSoFar[i, :] - prcSoFar[j, :]
-#         mean_spread = np.mean(spread)
-#         std_spread = np.std(spread)
-
-#         # Martingale Strategy
-#         if currentPos[i] != 0 and currentPos[j] != 0:
-#             old_spread = abs(prcSoFar[i, -2] - prcSoFar[j, -2])
-#             current_spread = abs(prcSoFar[i, -1] - prcSoFar[j, -1])
-
-#             # Check spread movement
-#             if current_spread > old_spread:
-#                 # Close positions
-#                 currentPos[i] -= currentPos[i]
-#                 currentPos[j] -= currentPos[j]
-#                 # if currentPos[i] > 0:
-                    
-#                 # else:
-#                 #     currentPos[i] += currentPos[i]
-                
-#                 # if currentPos[j] > 0:
-#                 #     currentPos[j] -= currentPos[j]
-#                 # else:
-                    
-#                 # currentPos[i] = 0
-#                 # currentPos[j] = 0
-                
-#             else:
-#                 # Double down on losses but capped at 3 double downs
-#                 if abs(currentPos[i]) < 80 and abs(currentPos[j]) < 80:
-#                     currentPos[i] *= 1.5
-#                     currentPos[j] *= 1.5
-
-#             # Update price positions
-#             # pricePos[i] = prcSoFar[i, -1]
-#             # pricePos[j] = prcSoFar[j, -1]        
-
-#         # Initial buy
-#         else:
-#             # Get Z score
-#             if std_spread > 0:
-#                 z_score = (spread[-1] - mean_spread)/std_spread
-#             else:
-#                 z_score = 0
-
-#             # Base position
-#             base_position = 10
-
-#             # Trading Signal
-#             if z_score > 1:
-#                 # Short i, Long j
-#                 currentPos[i] -= base_position
-#                 currentPos[j] += base_position
-
-#             elif z_score < -1:
-#                 # Long i, Short j
-#                 currentPos[i] += base_position
-#                 currentPos[j] -= base_position
-            
-#             # Update price positions
-#             # pricePos[i] = prcSoFar[i, -1]
-#             # pricePos[j] = prcSoFar[j, -1]
-
-#     return currentPos
