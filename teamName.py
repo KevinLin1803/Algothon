@@ -7,7 +7,10 @@ import numpy as np
 
 nInst = 50
 currentPos = np.zeros(nInst)
-pricePos = np.zeros(nInst)
+
+
+# Trading Signals based on EMA, RSI, and CCI
+
 
 def calculate_ema(prices, window):
     ''' Calculating the Exponential Moving Average (EMA) '''
@@ -17,6 +20,7 @@ def calculate_ema(prices, window):
     for i in range(1, len(prices)):
         ema[i] = alpha * prices[i] + (1 - alpha) * ema[i - 1]
     return ema
+
 
 def calculate_rsi(prices, window):
     ''' Calculating the Relative Strength Index (RSI) '''
@@ -52,7 +56,7 @@ def calculate_cci(prices, window):
 
 
 def getMyPosition(prcSoFar):
-    global currentPos, pricePos
+    global currentPos
     (nins, nt) = prcSoFar.shape
     if nt < 2:
         return np.zeros(nins)
@@ -66,7 +70,7 @@ def getMyPosition(prcSoFar):
     rsi_buy_threshold = 50
     rsi_sell_threshold = 50
     
-    # CCI Variables (can change the windows and threshold)
+    # CCI Variables (can change the windows and thresholds)
     cci_window = 100
     cci_buy_threshold = 50
     cci_sell_threshold = 50
