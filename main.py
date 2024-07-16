@@ -85,11 +85,11 @@ def getMyPosition(prcSoFar):
         # Buy signal -- if ema(10) > ema(12) AND rsi(21) < 50 and CCI(100) < 50
         if ema_short[-1] > ema_long[-1] and rsi[-1] < rsi_buy_threshold and cci[-1] > cci_buy_threshold:
             # We have no exit
-            currentPos[i] += (300/prcSoFar[i, -1]) // volatility
+            currentPos[i] += (100/prcSoFar[i, -1]) // volatility
 
         # Sell signal
         elif ema_short[-1] < ema_long[-1] and rsi[-1] > rsi_sell_threshold and cci[-1] < cci_sell_threshold:
-            currentPos[i] -= (300/prcSoFar[i, -1]) // volatility
+            currentPos[i] -= (100/prcSoFar[i, -1]) // volatility
 
         # Hold Signal
         else:
